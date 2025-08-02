@@ -1,7 +1,7 @@
 const std = @import("std");
 const config_loader = @import("config_loader.zig");
 
-const c = if (@import("builtin").os.tag == .windows)
+pub const c = if (@import("builtin").os.tag == .windows)
     @cImport({
         @cInclude("windows.h");
     })

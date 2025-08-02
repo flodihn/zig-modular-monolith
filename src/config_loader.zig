@@ -1,5 +1,7 @@
 const std = @import("std");
 
+//TODO: Replace with a toml-parser.
+
 // Struct to represent a module from the text config
 pub const ModuleConfig = struct {
     name: [:0]const u8, // Changed to null-terminated for safety
@@ -21,12 +23,6 @@ pub fn parseModuleConfig(allocator: std.mem.Allocator, config_file_path: []const
     const file_contents = try file.readToEndAlloc(allocator, 1024 * 1024); // Max 1MB
     defer allocator.free(file_contents);
 
-    // Validate file contents
-    if (!std.unicode.utf8Validate(file_contents)) {
-        std.debug.print("Error: modules.txt contains invalid UTF-8\n", .{});
-        return error.InvalidUtf8;
-    }
-
     // Split content into lines
     var lines = std.mem.splitSequence(u8, file_contents, "\n");
     var module_configs = std.ArrayList(ModuleConfig).init(allocator);
@@ -41,7 +37,7 @@ pub fn parseModuleConfig(allocator: std.mem.Allocator, config_file_path: []const
     var line_number: usize = 1;
     while (lines.next()) |line| {
         const trimmed = std.mem.trim(u8, line, " \t");
-        std.debug.print("Line {}: '{s}'\n", .{ line_number, trimmed }); // Debug print
+        //std.debug.print("Line {}: '{s}'\n", .{ line_number, trimmed }); // Debug print
 
         if (trimmed.len == 0) {
             // Empty line, finalize current module if exists

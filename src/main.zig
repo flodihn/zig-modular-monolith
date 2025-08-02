@@ -27,20 +27,20 @@ pub fn main() !void {
     }
 
     // Define the function signature to load
-    //const MyFuncType = fn (i32) callconv(.C) i32;
+    const MyFuncType = fn (i32) callconv(.C) i32;
 
     // Load enabled modules
-    //const loaded_modules = try module_loader.loadModules(MyFuncType, allocator, module_configs, "my_function");
-    //defer {
-    //    for (loaded_modules) |module| {
-    //        if (@import("builtin").os.tag == .windows) {
-    //            _ = module_loader.c.FreeLibrary(module.handle);
-    //        } else {
-    //            _ = module_loader.c.dlclose(module.handle);
-    //        }
-    //    }
-    //    allocator.free(loaded_modules);
-    //}
+    const loaded_modules = try module_loader.loadModules(MyFuncType, allocator, module_configs, "my_function");
+    defer {
+        for (loaded_modules) |module| {
+            if (@import("builtin").os.tag == .windows) {
+                _ = module_loader.c.FreeLibrary(module.handle);
+            } else {
+                _ = module_loader.c.dlclose(module.handle);
+            }
+        }
+        allocator.free(loaded_modules);
+    }
 
     // Call each loaded function
     //for (loaded_modules) |module| {
