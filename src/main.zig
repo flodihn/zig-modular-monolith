@@ -1,51 +1,39 @@
+// main.zig
 const std = @import("std");
-const config_loader = @import("config_loader.zig");
 const module_loader = @import("module_loader.zig");
+const config_loader = @import("config_loader.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
+    defer {
+        if (gpa.deinit() == .leak) {
+            std.debug.print("Memory leak detected!\n", .{});
+        }
+    }
     const allocator = gpa.allocator();
 
-    // Parse the TOML configuration
-    const module_configs = try config_loader.parseModuleConfig(allocator, "modules.config");
+    // Load config from modules.config
+    const configs = try config_loader.loadConfig(allocator, "modules.config");
     defer {
-        for (module_configs) |*config| {
+        for (configs) |config| {
             config.deinit(allocator);
         }
-        allocator.free(module_configs);
+        allocator.free(configs);
     }
 
-    // Print all ModuleConfig structs to verify parsing
-    std.debug.print("Parsed Module Configurations:\n", .{});
-    for (module_configs) |config| {
-        std.debug.print("  Name: {s}, File Path: {s}, Enabled: {}\n", .{
-            config.name,
-            config.file_path,
-            config.is_enabled,
-        });
-    }
-
-    // Define the function signature to load
-    const MyFuncType = fn (i32) callconv(.C) i32;
-
-    // Load enabled modules
-    const loaded_modules = try module_loader.loadModules(MyFuncType, allocator, module_configs, "my_function");
+    // Load modules
+    const modules = try module_loader.loadModules(allocator, configs);
     defer {
-        for (loaded_modules) |module| {
-            if (@import("builtin").os.tag == .windows) {
-                _ = module_loader.c.FreeLibrary(module.handle);
-            } else {
-                _ = module_loader.c.dlclose(module.handle);
-            }
+        for (modules) |module| {
+            module.interface.stop();
+            module.deinit();
         }
-        allocator.free(loaded_modules);
+        allocator.free(modules);
     }
 
-    // Call each loaded function
-    //for (loaded_modules) |module| {
-    //    const func: MyFuncType = @ptrCast(module.func);
-    //    const result = func(42);
-    //    std.debug.print("Module '{s}' result: {}\n", .{ module.name, result });
-    //}
+    // Call start for each module with its configuration
+    for (modules, configs) |module, config| {
+        std.debug.print("Starting module: {s}\n", .{module.name});
+        module.interface.start(if (config.module_specific_config.len > 0) config.module_specific_config.ptr else null, config.module_specific_config.len, module.interface.findConfigValue);
+    }
 }

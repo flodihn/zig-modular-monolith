@@ -1,134 +1,95 @@
+// config_loader.zig
 const std = @import("std");
 
-//TODO: Replace with a toml-parser.
+pub const KeyValue = extern struct {
+    key: [*:0]const u8,
+    value: [*:0]const u8,
+};
 
-// Struct to represent a module from the text config
 pub const ModuleConfig = struct {
-    name: [:0]const u8, // Changed to null-terminated for safety
+    name: []const u8,
     file_path: [:0]const u8,
     is_enabled: bool,
+    module_specific_config: []const KeyValue = &.{},
 
-    pub fn deinit(self: *ModuleConfig, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: ModuleConfig, allocator: std.mem.Allocator) void {
         allocator.free(self.name);
         allocator.free(self.file_path);
+        for (self.module_specific_config) |kv| {
+            allocator.free(std.mem.span(kv.key));
+            allocator.free(std.mem.span(kv.value));
+        }
+        allocator.free(self.module_specific_config);
     }
 };
 
-// Parse text file and return a list of module configurations
-pub fn parseModuleConfig(allocator: std.mem.Allocator, config_file_path: []const u8) ![]ModuleConfig {
-    // Read the text file
-    const file = try std.fs.cwd().openFile(config_file_path, .{});
-    defer file.close();
+pub fn loadConfig(allocator: std.mem.Allocator, file_path: []const u8) ![]ModuleConfig {
+    const file_content = try std.fs.cwd().readFileAlloc(allocator, file_path, 1024 * 1024);
+    defer allocator.free(file_content);
 
-    const file_contents = try file.readToEndAlloc(allocator, 1024 * 1024); // Max 1MB
-    defer allocator.free(file_contents);
+    var modules = std.ArrayList(ModuleConfig).init(allocator);
+    errdefer {
+        for (modules.items) |module| {
+            module.deinit(allocator);
+        }
+        modules.deinit();
+    }
 
-    // Split content into lines
-    var lines = std.mem.splitSequence(u8, file_contents, "\n");
-    var module_configs = std.ArrayList(ModuleConfig).init(allocator);
-    defer module_configs.deinit();
+    var current_module: ?*ModuleConfig = null;
+    errdefer if (current_module) |cm| allocator.destroy(cm);
 
-    var current_module: ?struct {
-        name: ?[]const u8,
-        file_path: ?[]const u8,
-        is_enabled: ?bool,
-    } = null;
-
-    var line_number: usize = 1;
+    var lines = std.mem.splitSequence(u8, file_content, "\n");
     while (lines.next()) |line| {
         const trimmed = std.mem.trim(u8, line, " \t");
-        //std.debug.print("Line {}: '{s}'\n", .{ line_number, trimmed }); // Debug print
-
-        if (trimmed.len == 0) {
-            // Empty line, finalize current module if exists
-            if (current_module) |module| {
-                if (module.name == null or module.file_path == null or module.is_enabled == null) {
-                    std.debug.print("Error at line {}: Incomplete module\n", .{line_number});
-                    return error.IncompleteModule;
-                }
-                const name = try allocator.dupeZ(u8, module.name.?);
-                const file_path = try allocator.dupeZ(u8, module.file_path.?);
-                try module_configs.append(ModuleConfig{
-                    .name = name,
-                    .file_path = file_path,
-                    .is_enabled = module.is_enabled.?,
-                });
-                current_module = null;
-            }
-            line_number += 1;
-            continue;
-        }
+        if (trimmed.len == 0) continue;
 
         if (std.mem.eql(u8, trimmed, "Module:")) {
-            // Start new module, finalize previous if exists
-            if (current_module) |module| {
-                if (module.name == null or module.file_path == null or module.is_enabled == null) {
-                    std.debug.print("Error at line {}: Incomplete module\n", .{line_number});
-                    return error.IncompleteModule;
-                }
-                const name = try allocator.dupeZ(u8, module.name.?);
-                const file_path = try allocator.dupeZ(u8, module.file_path.?);
-                try module_configs.append(ModuleConfig{
-                    .name = name,
-                    .file_path = file_path,
-                    .is_enabled = module.is_enabled.?,
-                });
+            if (current_module != null) {
+                try modules.append(current_module.?.*);
+                allocator.destroy(current_module.?);
+                current_module = null;
             }
-            current_module = .{ .name = null, .file_path = null, .is_enabled = null };
-            line_number += 1;
+            current_module = try allocator.create(ModuleConfig);
+            current_module.?.* = ModuleConfig{
+                .name = "",
+                .file_path = "",
+                .is_enabled = false,
+                .module_specific_config = &.{},
+            };
             continue;
         }
 
-        // Parse key-value pair
-        var key_value = std.mem.splitSequence(u8, trimmed, ":");
-        const key = std.mem.trim(u8, key_value.next() orelse {
-            std.debug.print("Error at line {}: Invalid line format\n", .{line_number});
-            return error.InvalidLine;
-        }, " \t");
-        const value = std.mem.trim(u8, key_value.next() orelse {
-            std.debug.print("Error at line {}: Missing value\n", .{line_number});
-            return error.InvalidLine;
-        }, " \t");
+        if (current_module == null) continue;
 
-        if (current_module == null) {
-            std.debug.print("Error at line {}: Field outside Module section\n", .{line_number});
-            return error.UnexpectedField;
-        }
+        var parts = std.mem.splitSequence(u8, trimmed, ":");
+        const key = std.mem.trim(u8, parts.next() orelse continue, " \t");
+        const value = std.mem.trim(u8, parts.next() orelse continue, " \t");
 
         if (std.mem.eql(u8, key, "name")) {
-            current_module.?.name = value;
+            current_module.?.name = try allocator.dupe(u8, value);
         } else if (std.mem.eql(u8, key, "file_path")) {
-            current_module.?.file_path = value;
+            current_module.?.file_path = try allocator.dupeZ(u8, value);
         } else if (std.mem.eql(u8, key, "is_enabled")) {
-            if (std.mem.eql(u8, value, "true")) {
-                current_module.?.is_enabled = true;
-            } else if (std.mem.eql(u8, value, "false")) {
-                current_module.?.is_enabled = false;
-            } else {
-                std.debug.print("Error at line {}: Invalid boolean value '{s}'\n", .{ line_number, value });
-                return error.InvalidBoolean;
-            }
+            current_module.?.is_enabled = std.mem.eql(u8, value, "true");
         } else {
-            std.debug.print("Error at line {}: Unknown field '{s}'\n", .{ line_number, key });
-            return error.UnknownField;
+            var config_list = std.ArrayList(KeyValue).init(allocator);
+            for (current_module.?.module_specific_config) |kv| {
+                try config_list.append(kv);
+            }
+            try config_list.append(KeyValue{
+                .key = try allocator.dupeZ(u8, key),
+                .value = try allocator.dupeZ(u8, value),
+            });
+            const new_config = try config_list.toOwnedSlice();
+            allocator.free(current_module.?.module_specific_config);
+            current_module.?.module_specific_config = new_config;
         }
-        line_number += 1;
     }
 
-    // Finalize last module if exists
-    if (current_module) |module| {
-        if (module.name == null or module.file_path == null or module.is_enabled == null) {
-            std.debug.print("Error at line {}: Incomplete module\n", .{line_number});
-            return error.IncompleteModule;
-        }
-        const name = try allocator.dupeZ(u8, module.name.?);
-        const file_path = try allocator.dupeZ(u8, module.file_path.?);
-        try module_configs.append(ModuleConfig{
-            .name = name,
-            .file_path = file_path,
-            .is_enabled = module.is_enabled.?,
-        });
+    if (current_module != null) {
+        try modules.append(current_module.?.*);
+        allocator.destroy(current_module.?);
     }
 
-    return module_configs.toOwnedSlice();
+    return modules.toOwnedSlice();
 }
