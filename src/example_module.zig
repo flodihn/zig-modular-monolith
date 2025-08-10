@@ -1,10 +1,16 @@
 // example_module.zig
+// Example module for the Modular Monolith Framework, demonstrating event handling.
+// Copyright (c) 2025 Christian Flodihn
+// Licensed under the MIT License. See LICENSE.txt in the project root for details.
+// Part of the Modular Monolith Framework: https://github.com/flodihn/zig-modular-monolith
+
 const std = @import("std");
-const config_loader = @import("config_loader.zig");
+const Monolith = @import("common.zig").Monolith;
+const Event = @import("event_system/event.zig").Event;
 
 const ModuleState = struct {
     counter: i32,
-    name: [:0]const u8,
+    name: [*:0]const u8,
     custom_value: i32 = 0,
     other_value: []const u8 = "",
 };
@@ -17,19 +23,11 @@ var module_state = ModuleState{
     .other_value = "",
 };
 
-pub export fn start(config: ?[*]const config_loader.KeyValue, config_len: usize, findConfigValue: ?*const fn (config: ?[*]const config_loader.KeyValue, config_len: usize, key: [*:0]const u8) callconv(.C) ?[*:0]const u8) callconv(.C) void {
+pub export fn start(monolith: *const Monolith) callconv(.C) void {
+    _ = monolith;
     std.debug.print("Module '{s}' started, initial counter: {}\n", .{ module_state.name, module_state.counter });
-
-    if (config != null and findConfigValue != null) {
-        if (findConfigValue.?(config, config_len, "module_custom_value")) |value| {
-            module_state.custom_value = std.fmt.parseInt(i32, std.mem.span(value), 10) catch 0;
-            std.debug.print("Module '{s}' got module_custom_value: {}\n", .{ module_state.name, module_state.custom_value });
-        }
-        if (findConfigValue.?(config, config_len, "some_other_module_value")) |value| {
-            module_state.other_value = std.mem.span(value);
-            std.debug.print("Module '{s}' got some_other_module_value: {s}\n", .{ module_state.name, module_state.other_value });
-        }
-    }
+    // Send a test event
+    //monolith.eventSystem.sendEvent(module_state.name, .{ .event_type = "ModuleStarted", .data = "ExampleModule started" });
 }
 
 pub export fn stop() callconv(.C) void {
@@ -39,4 +37,8 @@ pub export fn stop() callconv(.C) void {
 pub export fn update(delta_time: f32) callconv(.C) void {
     module_state.counter += 1;
     std.debug.print("Module '{s}' updated, delta_time: {d:.3}, counter: {}\n", .{ module_state.name, delta_time, module_state.counter });
+}
+
+pub export fn onEvent(evt: Event) callconv(.C) void {
+    std.debug.print("Module '{s}' received event '{s}' with data: {s}\n", .{ module_state.name, evt.event_type, evt.data });
 }

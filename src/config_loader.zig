@@ -1,95 +1,83 @@
 // config_loader.zig
+// This is a configuration loader responsible for parsing the modules.config and creating
+// an array of ModuleConfigs that will be used by the ModuleLoader to load all enabled modules.
+// Copyright (c) 2025 Christian Flodihn
+// Licensed under the MIT License. See LICENSE.txt in the project root for details.
+// Part of the Modular Monolith Framework: https://github.com/flodihn/zig-modular-monolith
 const std = @import("std");
+const logger = @import("common.zig").logger;
+const ModuleConfig = @import("common.zig").ModuleConfig;
 
-pub const KeyValue = extern struct {
-    key: [*:0]const u8,
-    value: [*:0]const u8,
-};
+pub const ConfigLoader = struct {
+    allocator: std.mem.Allocator,
+    module_configs: std.ArrayList(*ModuleConfig),
 
-pub const ModuleConfig = struct {
-    name: []const u8,
-    file_path: [:0]const u8,
-    is_enabled: bool,
-    module_specific_config: []const KeyValue = &.{},
-
-    pub fn deinit(self: ModuleConfig, allocator: std.mem.Allocator) void {
-        allocator.free(self.name);
-        allocator.free(self.file_path);
-        for (self.module_specific_config) |kv| {
-            allocator.free(std.mem.span(kv.key));
-            allocator.free(std.mem.span(kv.value));
-        }
-        allocator.free(self.module_specific_config);
-    }
-};
-
-pub fn loadConfig(allocator: std.mem.Allocator, file_path: []const u8) ![]ModuleConfig {
-    const file_content = try std.fs.cwd().readFileAlloc(allocator, file_path, 1024 * 1024);
-    defer allocator.free(file_content);
-
-    var modules = std.ArrayList(ModuleConfig).init(allocator);
-    errdefer {
-        for (modules.items) |module| {
-            module.deinit(allocator);
-        }
-        modules.deinit();
+    pub fn init(allocator: std.mem.Allocator) !ConfigLoader {
+        return ConfigLoader{
+            .allocator = allocator,
+            .module_configs = std.ArrayList(*ModuleConfig).init(allocator),
+        };
     }
 
-    var current_module: ?*ModuleConfig = null;
-    errdefer if (current_module) |cm| allocator.destroy(cm);
+    pub fn deinit(self: *ConfigLoader) void {
+        for (self.module_configs.items) |module_config| {
+            self.allocator.free(module_config.name);
+            self.allocator.free(module_config.file_path);
+            self.allocator.destroy(module_config);
+        }
+        self.module_configs.deinit();
+    }
 
-    var lines = std.mem.splitSequence(u8, file_content, "\n");
-    while (lines.next()) |line| {
-        const trimmed = std.mem.trim(u8, line, " \t");
-        if (trimmed.len == 0) continue;
+    pub fn loadConfig(self: *ConfigLoader, config_file_path: []const u8) !void {
+        const file_content = try std.fs.cwd().readFileAlloc(self.allocator, config_file_path, 1024 * 1024);
+        defer self.allocator.free(file_content);
 
-        if (std.mem.eql(u8, trimmed, "Module:")) {
-            if (current_module != null) {
-                try modules.append(current_module.?.*);
-                allocator.destroy(current_module.?);
-                current_module = null;
+        errdefer {
+            for (self.module_configs.items) |module_config| {
+                self.allocator.free(module_config.name);
+                self.allocator.free(module_config.file_path);
+                self.allocator.destroy(module_config);
             }
-            current_module = try allocator.create(ModuleConfig);
-            current_module.?.* = ModuleConfig{
-                .name = "",
-                .file_path = "",
-                .is_enabled = false,
-                .module_specific_config = &.{},
-            };
-            continue;
+            self.module_configs.deinit();
         }
 
-        if (current_module == null) continue;
+        var module_config: ?*ModuleConfig = null;
+        errdefer if (module_config) |mod| self.allocator.destroy(mod);
 
-        var parts = std.mem.splitSequence(u8, trimmed, ":");
-        const key = std.mem.trim(u8, parts.next() orelse continue, " \t");
-        const value = std.mem.trim(u8, parts.next() orelse continue, " \t");
+        var lines = std.mem.splitSequence(u8, file_content, "\n");
+        while (lines.next()) |line| {
+            const trimmed = std.mem.trim(u8, line, " \t");
+            if (trimmed.len == 0) continue;
 
-        if (std.mem.eql(u8, key, "name")) {
-            current_module.?.name = try allocator.dupe(u8, value);
-        } else if (std.mem.eql(u8, key, "file_path")) {
-            current_module.?.file_path = try allocator.dupeZ(u8, value);
-        } else if (std.mem.eql(u8, key, "is_enabled")) {
-            current_module.?.is_enabled = std.mem.eql(u8, value, "true");
-        } else {
-            var config_list = std.ArrayList(KeyValue).init(allocator);
-            for (current_module.?.module_specific_config) |kv| {
-                try config_list.append(kv);
+            if (std.mem.eql(u8, trimmed, "Module:")) {
+                if (module_config != null) {
+                    try self.module_configs.append(module_config.?);
+                    module_config = null;
+                }
+                module_config = try self.allocator.create(ModuleConfig);
+                errdefer if (module_config) |mod| self.allocator.destroy(mod);
+                continue;
             }
-            try config_list.append(KeyValue{
-                .key = try allocator.dupeZ(u8, key),
-                .value = try allocator.dupeZ(u8, value),
-            });
-            const new_config = try config_list.toOwnedSlice();
-            allocator.free(current_module.?.module_specific_config);
-            current_module.?.module_specific_config = new_config;
+
+            if (module_config == null) continue;
+
+            var parts = std.mem.splitSequence(u8, trimmed, ":");
+            const key = std.mem.trim(u8, parts.next() orelse continue, " \t");
+            const value = std.mem.trim(u8, parts.next() orelse continue, " \t");
+
+            if (std.mem.eql(u8, key, "name")) {
+                module_config.?.name = try self.allocator.dupe(u8, value);
+            } else if (std.mem.eql(u8, key, "file_path")) {
+                module_config.?.file_path = try self.allocator.dupeZ(u8, value);
+            } else if (std.mem.eql(u8, key, "is_enabled")) {
+                module_config.?.is_enabled = std.mem.eql(u8, value, "true");
+            }
         }
-    }
 
-    if (current_module != null) {
-        try modules.append(current_module.?.*);
-        allocator.destroy(current_module.?);
-    }
+        if (module_config != null) {
+            try self.module_configs.append(module_config.?);
+        }
 
-    return modules.toOwnedSlice();
-}
+        logger.info("Successfully added {} module configurations.", .{self.module_configs.items.len});
+    }
+};
