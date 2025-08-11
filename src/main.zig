@@ -6,62 +6,63 @@
 
 const std = @import("std");
 const logger = @import("common.zig").logger;
-const Monolith = @import("common.zig").Monolith;
+const Monolith = @import("monolith.zig").Monolith;
 const ModuleLoader = @import("module_loader.zig").ModuleLoader;
 const ConfigLoader = @import("config_loader.zig").ConfigLoader;
 const InternalEventSystem = @import("event_system/internal_event_system.zig").InternalEventSystem;
 
-pub fn main() !void {
-    logger.info("Starting the modular monolith...", .{});
+// Global atomic flag for SIGINT
+var should_exit = std.atomic.Value(bool).init(false);
 
+// Signal handler for SIGINT
+fn handleSigint(sig: i32, info: *const std.posix.siginfo_t, context: ?*const anyopaque) callconv(.C) void {
+    _ = sig;
+    _ = info;
+    _ = context; // Unused parameters
+    should_exit.store(true, .release);
+    logger.info("Received SIGINT, stopping the modular monolith...", .{});
+}
+
+pub fn main() !void {
+    defer logger.info("Modular monolith successfully stopped.", .{});
+    logger.info("Starting the modular monolith...", .{});
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
         if (gpa.deinit() == .leak) {
             logger.err("Memory leak detected!\n", .{});
         }
     }
+
     const allocator = gpa.allocator();
 
-    // Initialize the core components
+    const act = std.posix.Sigaction{
+        .handler = .{ .sigaction = handleSigint },
+        .mask = std.posix.empty_sigset,
+        .flags = 0,
+    };
+    std.posix.sigaction(std.posix.SIG.INT, &act, null);
+    logger.info("SIGINT handler registered, press control-c to stop the modular monolith.", .{});
+
     var config_loader = try ConfigLoader.init(allocator);
     defer config_loader.deinit();
-
-    try config_loader.loadConfig("modules.config");
-
-    var event_system = try InternalEventSystem.init(allocator);
-    defer event_system.deinit();
 
     var module_loader = try ModuleLoader.init(allocator);
     defer module_loader.deinit();
 
-    // Initialize Monolith struct
-    //const monolith_instance = monolith.Monolith{
-    //    .configLoader = config_loader_instance,
-    //    .moduleLoader = module_loader_instance,
-    //    .eventSystem = event_system_instance,
-    //};
+    var internal_event_system = try InternalEventSystem.init(allocator);
+    defer internal_event_system.deinit();
 
-    // defer {
-    //     for (configs) |config| {
-    //         config.deinit(allocator);
-    //     }
-    //     allocator.free(configs);
-    // }
+    const monolith = try Monolith.init(allocator, &config_loader, &module_loader, &internal_event_system);
+    try monolith.load();
 
-    // Load modules
-    try module_loader.loadModules(config_loader.module_configs);
-    // std.debug.print("Number of modules loaded: {d}.\n", .{modules.len});
-    // defer {
-    //     for (modules) |module| {
-    //         module.interface.stop();
-    //         module.deinit();
-    //     }
-    //     allocator.free(modules);
-    //     event_system_instance.deinitEventSystem();
-    // }
+    logger.info("Running the modular monolith...", .{});
+    while (try monolith.run()) {
+        std.time.sleep(10 * std.time.ns_per_ms);
 
-    // Initialize event system with loaded modules
-    //event_system_instance.initEventSystem(allocator, modules);
+        if (should_exit.load(.acquire)) {
+            break;
+        }
+    }
 
     // Call start for each module
     // for (modules) |module| {

@@ -3,21 +3,14 @@
 // Copyright (c) 2025 Christian Flodihn
 // Licensed under the MIT License. See LICENSE.txt in the project root for details.
 // Part of the Modular Monolith Framework: https://github.com/flodihn/zig-modular-monolith
-
 const std = @import("std");
-
 const InternalEventSystem = @import("event_system/internal_event_system.zig").InternalEventSystem;
 const ModuleLoader = @import("module_loader.zig").ModuleLoader;
 const ConfigLoader = @import("config_loader.zig").ConfigLoader;
+const Monolith = @import("monolith.zig").Monolith;
 const Event = @import("event_system/event.zig").Event;
 
 pub const logger = std.log.scoped(.modular_monolith);
-
-pub const Monolith = struct {
-    configLoader: ConfigLoader,
-    moduleLoader: ModuleLoader,
-    eventSystem: InternalEventSystem,
-};
 
 pub const ModuleConfig = struct {
     name: []const u8 = &.{},

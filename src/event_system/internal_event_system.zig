@@ -3,7 +3,6 @@
 // Copyright (c) 2025 Christian Flodihn
 // Licensed under the MIT License. See LICENSE.txt in the project root for details.
 // Part of the Modular Monolith Framework: https://github.com/flodihn/zig-modular-monolith
-
 const std = @import("std");
 const event = @import("event.zig");
 const common = @import("../common.zig");
@@ -26,7 +25,7 @@ pub const InternalEventSystem = struct {
         std.debug.print("Event system deinitialized\n", .{});
     }
 
-    pub fn sendEvent(self: *const InternalEventSystem, sender_name: [*:0]const u8, evt: event.Event) callconv(.C) void {
+    pub fn sendEvent(self: *InternalEventSystem, sender_name: [*:0]const u8, evt: event.Event) callconv(.C) void {
         _ = self;
         // if (self.loaded_modules == null or self.allocator == null) {
         //     std.debug.print("Error: Event system not initialized\n", .{});
@@ -42,5 +41,9 @@ pub const InternalEventSystem = struct {
         //         }
         //     }
         // }
+    }
+
+    pub fn pumpEvents(self: *InternalEventSystem) !void {
+        _ = self;
     }
 };
