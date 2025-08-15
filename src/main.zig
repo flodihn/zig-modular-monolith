@@ -24,7 +24,16 @@ fn handleSigint(sig: i32, info: *const std.posix.siginfo_t, context: ?*const any
 }
 
 pub fn main() !void {
-    defer logger.info("Modular monolith successfully stopped.", .{});
+    var error_occurred: ?anyerror = null;
+
+    defer {
+        if (error_occurred) |err| {
+            logger.info("Modular monolith stopped due to error {}.", .{err});
+        } else {
+            logger.info("Modular monolith successfully stopped.", .{});
+        }
+    }
+
     logger.info("Starting the modular monolith...", .{});
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
@@ -43,20 +52,40 @@ pub fn main() !void {
     std.posix.sigaction(std.posix.SIG.INT, &act, null);
     logger.info("SIGINT handler registered, press control-c to stop the modular monolith.", .{});
 
-    var config_loader = try ConfigLoader.init(allocator);
+    var config_loader = ConfigLoader.init(allocator) catch |err| {
+        error_occurred = err;
+        return;
+    };
     defer config_loader.deinit();
 
-    var module_loader = try ModuleLoader.init(allocator);
+    var module_loader = ModuleLoader.init(allocator) catch |err| {
+        error_occurred = err;
+        return;
+    };
     defer module_loader.deinit();
 
-    var internal_event_system = try InternalEventSystem.init(allocator);
+    var internal_event_system = InternalEventSystem.init(allocator, &module_loader) catch |err| {
+        error_occurred = err;
+        return;
+    };
     defer internal_event_system.deinit();
 
-    const monolith = try Monolith.init(allocator, &config_loader, &module_loader, &internal_event_system);
-    try monolith.load();
+    var monolith: Monolith = try Monolith.init(allocator, &config_loader, &module_loader, &internal_event_system);
+    monolith.interface = monolith.createInterface();
+
+    monolith.load() catch |err| {
+        error_occurred = err;
+        return;
+    };
+
+    monolith.start() catch |err| {
+        error_occurred = err;
+        return;
+    };
 
     logger.info("Running the modular monolith...", .{});
     while (try monolith.run()) {
+        try monolith.internal_event_system.pumpEvents();
         std.time.sleep(10 * std.time.ns_per_ms);
 
         if (should_exit.load(.acquire)) {

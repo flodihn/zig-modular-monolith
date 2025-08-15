@@ -7,10 +7,33 @@ const std = @import("std");
 const InternalEventSystem = @import("event_system/internal_event_system.zig").InternalEventSystem;
 const ModuleLoader = @import("module_loader.zig").ModuleLoader;
 const ConfigLoader = @import("config_loader.zig").ConfigLoader;
-const Monolith = @import("monolith.zig").Monolith;
 const Event = @import("event_system/event.zig").Event;
 
 pub const logger = std.log.scoped(.modular_monolith);
+
+pub const c = if (@import("builtin").os.tag == .windows)
+    @cImport({
+        @cInclude("windows.h");
+    })
+else
+    @cImport({
+        @cInclude("dlfcn.h");
+    });
+
+pub const MonolithInterface = struct {
+    ptr: *anyopaque,
+    vtable: *const VTable,
+
+    pub const VTable = struct {
+        sendEvent: *const fn (ptr: *anyopaque, event: Event) void,
+        sendRequest: *const fn (ptr: *anyopaque, event: Event) void,
+        sendResponse: *const fn (ptr: *anyopaque, event: Event) void,
+    };
+
+    pub fn sendEvent(self: *const MonolithInterface, event: Event) void {
+        self.vtable.sendEvent(self.ptr, event);
+    }
+};
 
 pub const ModuleConfig = struct {
     name: []const u8 = &.{},
@@ -21,19 +44,9 @@ pub const ModuleConfig = struct {
 pub const Module = struct {
     name: []const u8,
     handle: LibHandle,
-    start: *const fn (monolith: *const Monolith) callconv(.C) void,
+    start: *const fn (monolith_interface: *const MonolithInterface) callconv(.C) void,
     stop: *const fn () callconv(.C) void,
     update: *const fn (delta_time: f32) callconv(.C) void,
     onEvent: ?*const fn (event: Event) callconv(.C) void,
-
-    pub const c = if (@import("builtin").os.tag == .windows)
-        @cImport({
-            @cInclude("windows.h");
-        })
-    else
-        @cImport({
-            @cInclude("dlfcn.h");
-        });
-
     pub const LibHandle = if (@import("builtin").os.tag == .windows) c.HMODULE else ?*anyopaque;
 };

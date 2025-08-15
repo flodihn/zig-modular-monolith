@@ -5,5 +5,5 @@
 // Part of the Modular Monolith Framework: https://github.com/flodihn/zig-modular-monolith
 pub const Event = extern struct {
     event_type: [*:0]const u8,
-    data: [*:0]const u8,
+    data: u32,
 };
