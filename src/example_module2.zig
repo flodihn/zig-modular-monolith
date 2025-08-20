@@ -23,10 +23,11 @@ var module_state = ModuleState{
 };
 
 pub export fn start(monolith: *const MonolithInterface) callconv(.C) void {
+    _ = monolith;
     std.debug.print("Module2 '{s}' started, initial counter: {}\n", .{ module_state.name, module_state.counter });
-    monolith.sendEvent(.{ .event_type = "jean", .data = 200 });
-    //monolith.internal_event_system.sendEvent(.{ .event_type = "ModuleStarted", .data = "ExampleModule started" });
-    monolith.sendEvent(.{ .event_type = "olle", .data = 22 });
+    //monolith.sendEvent(.{ .event_type = "jean", .data = 200 });
+    //monolith.sendEvent(.{ .event_type = "Module2Started", .data = "ExampleModule2 started" });
+    //monolith.sendEvent(.{ .event_type = "olle", .data = 22 });
 }
 
 pub export fn stop() callconv(.C) void {

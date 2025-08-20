@@ -22,11 +22,21 @@ var module_state = ModuleState{
     .other_value = "",
 };
 
-pub export fn start(monolith: *const MonolithInterface) callconv(.C) void {
+const MyEvent = struct {
+    data1: [*:0]const u8,
+    data2: i32,
+};
+
+pub export fn start(monolith: *MonolithInterface) callconv(.C) void {
     std.debug.print("Module '{s}' started, initial counter: {}\n", .{ module_state.name, module_state.counter });
-    monolith.sendEvent(.{ .event_type = "foo", .data = 200 });
-    //monolith.internal_event_system.sendEvent(.{ .event_type = "ModuleStarted", .data = "ExampleModule started" });
-    monolith.sendEvent(.{ .event_type = "bar", .data = 22 });
+    const event = monolith.makeEvent(MyEvent, "ExampleModule.Started", MyEvent{ .data1 = "foo", .data2 = 3 }) catch |err| {
+        std.debug.print("Got error: {}", .{err});
+        return;
+    };
+    monolith.sendEvent(event);
+    //monolith.sendEvent(.{ .event_type = "foo", .data = "bar" });
+    //monolith.sendEvent(.{ .event_type = "ModuleStarted", .data = "ExampleModule started" });
+    //monolith.sendEvent(.{ .event_type = "bar", .data = 22 });
 }
 
 pub export fn stop() callconv(.C) void {

@@ -38,13 +38,14 @@ pub const InternalEventSystem = struct {
         self.event_queue_mutex.lock();
         defer self.event_queue_mutex.unlock();
 
-        // Deep copy before queuing to own the strings
-        const copied_event = self.deepCopyEvent(event) catch |err| {
-            logger.err("Error deep copying event: {}", .{err});
-            return;
-        };
+        // Deep copy before queuing to own the strings because modules might
+        // have stack allocated the strings.
+        //const copied_event = self.deepCopyEvent(event) catch |err| {
+        //    logger.err("Error deep copying event: {}", .{err});
+        //    return;
+        //};
 
-        self.event_queue.writeItem(copied_event) catch |err| {
+        self.event_queue.writeItem(event) catch |err| {
             logger.err("Error writing event to queue: {}", .{err});
             return;
         };
@@ -80,17 +81,18 @@ pub const InternalEventSystem = struct {
         _ = self.arena.reset(.retain_capacity);
     }
 
-    fn deepCopyEvent(self: *InternalEventSystem, event: Event) !Event {
-        const allocator = self.arena.allocator();
-        const event_type_slice = std.mem.span(event.event_type);
-        const event_type_copy = try allocator.dupeZ(u8, event_type_slice);
+    // fn deepCopyEvent(self: *InternalEventSystem, event: Event) !Event {
+    //     const allocator = self.arena.allocator();
 
-        //const data_slice = std.mem.span(event.data);
-        //const data_copy = try self.allocator.dupeZ(u8, data_slice);
+    //     const event_type_slice = std.mem.span(event.event_type);
+    //     const event_type_copy = try allocator.dupeZ(u8, event_type_slice);
 
-        return Event{
-            .event_type = event_type_copy,
-            .data = event.data,
-        };
-    }
+    //     const data_slice = std.mem.span(event.data);
+    //     const data_copy = try self.allocator.dupe(u8, data_slice);
+
+    //     return Event{
+    //         .event_type = event_type_copy,
+    //         .data = data_copy,
+    //     };
+    // }
 };

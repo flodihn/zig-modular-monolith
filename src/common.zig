@@ -4,6 +4,8 @@
 // Licensed under the MIT License. See LICENSE.txt in the project root for details.
 // Part of the Modular Monolith Framework: https://github.com/flodihn/zig-modular-monolith
 const std = @import("std");
+const Mutex = std.Thread.Mutex;
+
 const InternalEventSystem = @import("event_system/internal_event_system.zig").InternalEventSystem;
 const ModuleLoader = @import("module_loader.zig").ModuleLoader;
 const ConfigLoader = @import("config_loader.zig").ConfigLoader;
@@ -21,6 +23,8 @@ else
     });
 
 pub const MonolithInterface = struct {
+    event_allocator: std.heap.ArenaAllocator,
+    make_event_mutex: Mutex,
     ptr: *anyopaque,
     vtable: *const VTable,
 
@@ -30,8 +34,28 @@ pub const MonolithInterface = struct {
         sendResponse: *const fn (ptr: *anyopaque, event: Event) void,
     };
 
-    pub fn sendEvent(self: *const MonolithInterface, event: Event) void {
+    pub fn sendEvent(self: *MonolithInterface, event: Event) void {
         self.vtable.sendEvent(self.ptr, event);
+    }
+
+    pub fn makeEvent(self: *MonolithInterface, comptime T: type, event_type: [*:0]const u8, data: T) !Event {
+        self.make_event_mutex.lock();
+        defer self.make_event_mutex.unlock();
+
+        const allocator = self.event_allocator.allocator();
+
+        // TODO: Lets not force struct type, events should be able to send numbers and string if they want to.
+        // if (@typeInfo(T) == .@"struct") {
+        //     @compileError("Data must be a struct");
+        // }
+
+        const event_type_slice = std.mem.span(event_type);
+        const event_type_copy = try allocator.dupeZ(u8, event_type_slice);
+
+        const data_as_bytes: []const u8 = std.mem.asBytes(&data);
+        const data_copy = try allocator.dupe(u8, data_as_bytes);
+
+        return Event{ .event_type = event_type_copy, .data_len = @sizeOf(T), .data = data_copy.ptr };
     }
 };
 

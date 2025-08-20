@@ -5,6 +5,8 @@
 // Licensed under the MIT License. See LICENSE.txt in the project root for details.
 // Part of the Modular Monolith Framework: https://github.com/flodihn/zig-modular-monolith
 const std = @import("std");
+const Mutex = std.Thread.Mutex;
+
 const logger = @import("common.zig").logger;
 const InternalEventSystem = @import("event_system/internal_event_system.zig").InternalEventSystem;
 const MonolithInterface = @import("common.zig").MonolithInterface;
@@ -14,6 +16,7 @@ const Event = @import("event_system/event.zig").Event;
 
 pub const Monolith = struct {
     allocator: std.mem.Allocator,
+    event_allocator: std.heap.ArenaAllocator,
     config_loader: *ConfigLoader,
     module_loader: *ModuleLoader,
     internal_event_system: *InternalEventSystem,
@@ -27,6 +30,7 @@ pub const Monolith = struct {
     ) !Monolith {
         return Monolith{
             .allocator = allocator,
+            .event_allocator = std.heap.ArenaAllocator.init(allocator),
             .config_loader = config_loader,
             .module_loader = module_loader,
             .internal_event_system = internal_event_system,
@@ -56,6 +60,8 @@ pub const Monolith = struct {
         };
 
         return MonolithInterface{
+            .event_allocator = self.event_allocator,
+            .make_event_mutex = Mutex{},
             .ptr = @ptrCast(@alignCast(self)),
             .vtable = &comptime MonolithInterface.VTable{
                 .sendEvent = impl.sendEventFn,

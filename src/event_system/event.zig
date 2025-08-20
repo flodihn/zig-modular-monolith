@@ -4,6 +4,10 @@
 // Licensed under the MIT License. See LICENSE.txt in the project root for details.
 // Part of the Modular Monolith Framework: https://github.com/flodihn/zig-modular-monolith
 pub const Event = extern struct {
+    // Event type is supposed to store a unique name defining the event.
     event_type: [*:0]const u8,
-    data: u32,
+    // The data is a binary containing anything data the event needs, usually a struct.
+    data: [*]const u8,
+    // Length of the binary
+    data_len: usize,
 };
