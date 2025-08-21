@@ -44,6 +44,9 @@ pub fn main() !void {
 
     const allocator = gpa.allocator();
 
+    const event_allocator = std.heap.ArenaAllocator.init(allocator);
+    defer event_allocator.deinit();
+
     const act = std.posix.Sigaction{
         .handler = .{ .sigaction = handleSigint },
         .mask = std.posix.empty_sigset,
@@ -64,13 +67,24 @@ pub fn main() !void {
     };
     defer module_loader.deinit();
 
-    var internal_event_system = InternalEventSystem.init(allocator, &module_loader) catch |err| {
+    var internal_event_system = InternalEventSystem.init(
+        allocator,
+        event_allocator,
+        &module_loader,
+    ) catch |err| {
         error_occurred = err;
         return;
     };
     defer internal_event_system.deinit();
 
-    var monolith: Monolith = try Monolith.init(allocator, &config_loader, &module_loader, &internal_event_system);
+    var monolith: Monolith = try Monolith.init(
+        allocator,
+        event_allocator,
+        &config_loader,
+        &module_loader,
+        &internal_event_system,
+    );
+
     monolith.interface = monolith.createInterface();
 
     monolith.load() catch |err| {

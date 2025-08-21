@@ -13,15 +13,19 @@ const Mutex = std.Thread.Mutex;
 
 pub const InternalEventSystem = struct {
     allocator: std.mem.Allocator,
-    arena: std.heap.ArenaAllocator,
+    event_allocator: std.heap.ArenaAllocator,
     event_queue_mutex: Mutex,
     event_queue: Fifo,
     module_loader: *ModuleLoader,
 
-    pub fn init(allocator: std.mem.Allocator, module_loader: *ModuleLoader) !InternalEventSystem {
+    pub fn init(
+        allocator: std.mem.Allocator,
+        event_allocator: std.heap.ArenaAllocator,
+        module_loader: *ModuleLoader,
+    ) !InternalEventSystem {
         return InternalEventSystem{
             .allocator = allocator,
-            .arena = std.heap.ArenaAllocator.init(allocator),
+            .event_allocator = event_allocator,
             .event_queue_mutex = Mutex{},
             .event_queue = Fifo.init(allocator),
             .module_loader = module_loader,
@@ -29,7 +33,6 @@ pub const InternalEventSystem = struct {
     }
 
     pub fn deinit(self: *InternalEventSystem) void {
-        self.arena.deinit();
         self.event_queue.deinit();
         std.debug.print("Event system deinitialized\n", .{});
     }
@@ -78,21 +81,6 @@ pub const InternalEventSystem = struct {
             }
         }
 
-        _ = self.arena.reset(.retain_capacity);
+        _ = self.event_allocator.reset(.retain_capacity);
     }
-
-    // fn deepCopyEvent(self: *InternalEventSystem, event: Event) !Event {
-    //     const allocator = self.arena.allocator();
-
-    //     const event_type_slice = std.mem.span(event.event_type);
-    //     const event_type_copy = try allocator.dupeZ(u8, event_type_slice);
-
-    //     const data_slice = std.mem.span(event.data);
-    //     const data_copy = try self.allocator.dupe(u8, data_slice);
-
-    //     return Event{
-    //         .event_type = event_type_copy,
-    //         .data = data_copy,
-    //     };
-    // }
 };

@@ -24,17 +24,18 @@ pub const Monolith = struct {
 
     pub fn init(
         allocator: std.mem.Allocator,
+        event_allocator: std.heap.ArenaAllocator,
         config_loader: *ConfigLoader,
         module_loader: *ModuleLoader,
         internal_event_system: *InternalEventSystem,
     ) !Monolith {
         return Monolith{
             .allocator = allocator,
-            .event_allocator = std.heap.ArenaAllocator.init(allocator),
+            .event_allocator = event_allocator,
             .config_loader = config_loader,
             .module_loader = module_loader,
             .internal_event_system = internal_event_system,
-            .interface = undefined, // Temporarily undefined; set immediately below.
+            .interface = undefined,
         };
     }
 
