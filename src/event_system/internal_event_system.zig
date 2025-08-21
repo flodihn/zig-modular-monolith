@@ -13,14 +13,14 @@ const Mutex = std.Thread.Mutex;
 
 pub const InternalEventSystem = struct {
     allocator: std.mem.Allocator,
-    event_allocator: std.heap.ArenaAllocator,
+    event_allocator: std.mem.Allocator,
     event_queue_mutex: Mutex,
     event_queue: Fifo,
     module_loader: *ModuleLoader,
 
     pub fn init(
         allocator: std.mem.Allocator,
-        event_allocator: std.heap.ArenaAllocator,
+        event_allocator: std.mem.Allocator,
         module_loader: *ModuleLoader,
     ) !InternalEventSystem {
         return InternalEventSystem{
@@ -81,6 +81,6 @@ pub const InternalEventSystem = struct {
             }
         }
 
-        _ = self.event_allocator.reset(.retain_capacity);
+        //_ = self.event_allocator.reset(.retain_capacity);
     }
 };

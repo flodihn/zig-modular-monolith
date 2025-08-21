@@ -44,8 +44,10 @@ pub fn main() !void {
 
     const allocator = gpa.allocator();
 
-    const event_allocator = std.heap.ArenaAllocator.init(allocator);
-    defer event_allocator.deinit();
+    var arena_allocator = std.heap.ArenaAllocator.init(allocator);
+    defer arena_allocator.deinit();
+
+    const event_allocator = arena_allocator.allocator();
 
     const act = std.posix.Sigaction{
         .handler = .{ .sigaction = handleSigint },
@@ -100,6 +102,7 @@ pub fn main() !void {
     logger.info("Running the modular monolith...", .{});
     while (try monolith.run()) {
         try monolith.internal_event_system.pumpEvents();
+        _ = arena_allocator.reset(.retain_capacity);
         std.time.sleep(10 * std.time.ns_per_ms);
 
         if (should_exit.load(.acquire)) {

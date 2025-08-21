@@ -16,7 +16,7 @@ const Event = @import("event_system/event.zig").Event;
 
 pub const Monolith = struct {
     allocator: std.mem.Allocator,
-    event_allocator: std.heap.ArenaAllocator,
+    event_allocator: std.mem.Allocator,
     config_loader: *ConfigLoader,
     module_loader: *ModuleLoader,
     internal_event_system: *InternalEventSystem,
@@ -24,7 +24,7 @@ pub const Monolith = struct {
 
     pub fn init(
         allocator: std.mem.Allocator,
-        event_allocator: std.heap.ArenaAllocator,
+        event_allocator: std.mem.Allocator,
         config_loader: *ConfigLoader,
         module_loader: *ModuleLoader,
         internal_event_system: *InternalEventSystem,

@@ -23,7 +23,7 @@ else
     });
 
 pub const MonolithInterface = struct {
-    event_allocator: std.heap.ArenaAllocator,
+    event_allocator: std.mem.Allocator,
     make_event_mutex: Mutex,
     ptr: *anyopaque,
     vtable: *const VTable,
@@ -42,18 +42,16 @@ pub const MonolithInterface = struct {
         self.make_event_mutex.lock();
         defer self.make_event_mutex.unlock();
 
-        const allocator = self.event_allocator.allocator();
-
         // TODO: Lets not force struct type, events should be able to send numbers and string if they want to.
         // if (@typeInfo(T) == .@"struct") {
         //     @compileError("Data must be a struct");
         // }
 
         const event_type_slice = std.mem.span(event_type);
-        const event_type_copy = try allocator.dupeZ(u8, event_type_slice);
+        const event_type_copy = try self.event_allocator.dupeZ(u8, event_type_slice);
 
         const data_as_bytes: []const u8 = std.mem.asBytes(&data);
-        const data_copy = try allocator.dupe(u8, data_as_bytes);
+        const data_copy = try self.event_allocator.dupe(u8, data_as_bytes);
 
         return Event{ .event_type = event_type_copy, .data_len = @sizeOf(T), .data = data_copy.ptr };
     }
