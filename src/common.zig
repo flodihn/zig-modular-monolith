@@ -39,6 +39,8 @@ pub const MonolithInterface = struct {
     }
 
     pub fn makeEvent(self: *MonolithInterface, comptime T: type, event_type: [*:0]const u8, data: T) !Event {
+        // Using the shared arena allocator here would make function not thread safe, it need a mutex
+        // to prevent multiple allocations at the same time.
         self.make_event_mutex.lock();
         defer self.make_event_mutex.unlock();
 
@@ -50,10 +52,21 @@ pub const MonolithInterface = struct {
         const event_type_slice = std.mem.span(event_type);
         const event_type_copy = try self.event_allocator.dupeZ(u8, event_type_slice);
 
-        const data_as_bytes: []const u8 = std.mem.asBytes(&data);
-        const data_copy = try self.event_allocator.dupe(u8, data_as_bytes);
+        const data_copy = try self.event_allocator.create(T);
+        data_copy.* = data;
+        const data_copy_ptr: ?*anyopaque = @ptrCast(data_copy);
 
-        return Event{ .event_type = event_type_copy, .data_len = @sizeOf(T), .data = data_copy.ptr };
+        return Event{ .event_type = event_type_copy, .data_len = @sizeOf(T), .data = data_copy_ptr };
+    }
+
+    pub fn getEventData(self: *MonolithInterface, comptime T: type, event: Event) !T {
+        _ = self;
+        if (event.data_len != @sizeOf(T)) {
+            return error.InvalidDataSize;
+        }
+
+        const type_ptr: *const T = @ptrCast(@alignCast(event.data.?));
+        return type_ptr.*;
     }
 };
 
@@ -69,6 +82,6 @@ pub const Module = struct {
     start: *const fn (monolith_interface: *const MonolithInterface) callconv(.C) void,
     stop: *const fn () callconv(.C) void,
     update: *const fn (delta_time: f32) callconv(.C) void,
-    onEvent: ?*const fn (event: Event) callconv(.C) void,
+    onEvent: ?*const fn (monolith: *MonolithInterface, event: Event) callconv(.C) void,
     pub const LibHandle = if (@import("builtin").os.tag == .windows) c.HMODULE else ?*anyopaque;
 };

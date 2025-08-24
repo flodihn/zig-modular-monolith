@@ -25,18 +25,24 @@ var module_state = ModuleState{
 const MyEvent = struct {
     data1: [*:0]const u8,
     data2: i32,
+    data3: f32,
+    data4: u8,
 };
 
 pub export fn start(monolith: *MonolithInterface) callconv(.C) void {
     std.debug.print("Module '{s}' started, initial counter: {}\n", .{ module_state.name, module_state.counter });
-    const event = monolith.makeEvent(MyEvent, "ExampleModule.Started", MyEvent{ .data1 = "foo", .data2 = 3 }) catch |err| {
+    const event = monolith.makeEvent(MyEvent, "ExampleModule.Started", MyEvent{ .data1 = "foo", .data2 = 3, .data3 = 3.1, .data4 = 'a' }) catch |err| {
         std.debug.print("Got error: {}", .{err});
         return;
     };
+
+    const event2 = monolith.makeEvent(MyEvent, "Event2", MyEvent{ .data1 = "olle", .data2 = 5, .data3 = 5.75, .data4 = 'b' }) catch |err| {
+        std.debug.print("Got error: {}", .{err});
+        return;
+    };
+
     monolith.sendEvent(event);
-    //monolith.sendEvent(.{ .event_type = "foo", .data = "bar" });
-    //monolith.sendEvent(.{ .event_type = "ModuleStarted", .data = "ExampleModule started" });
-    //monolith.sendEvent(.{ .event_type = "bar", .data = 22 });
+    monolith.sendEvent(event2);
 }
 
 pub export fn stop() callconv(.C) void {
@@ -48,6 +54,24 @@ pub export fn update(delta_time: f32) callconv(.C) void {
     std.debug.print("Module '{s}' updated, delta_time: {d:.3}, counter: {}\n", .{ module_state.name, delta_time, module_state.counter });
 }
 
-pub export fn onEvent(event: Event) callconv(.C) void {
+pub export fn onEvent(monolith: *MonolithInterface, event: Event) callconv(.C) void {
     std.debug.print("Module '{s}' received event '{s}'\n", .{ module_state.name, event.event_type });
+
+    const event_slice = std.mem.span(event.event_type);
+
+    if (std.mem.eql(u8, event_slice, "ExampleModule.Started")) {
+        const data = monolith.getEventData(MyEvent, event) catch |err| {
+            std.debug.print("Error decoding event data {}\n", .{err});
+            return;
+        };
+        std.debug.print("Decoded data: {s}, {} {} {}\n", .{ data.data1, data.data2, data.data3, data.data4 });
+    }
+
+    if (std.mem.eql(u8, event_slice, "Event2")) {
+        const data = monolith.getEventData(MyEvent, event) catch |err| {
+            std.debug.print("Error decoding event data {}\n", .{err});
+            return;
+        };
+        std.debug.print("Decoded data: {s}, {} {} {}\n", .{ data.data1, data.data2, data.data3, data.data4 });
+    }
 }

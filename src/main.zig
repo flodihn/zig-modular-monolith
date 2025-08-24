@@ -88,6 +88,7 @@ pub fn main() !void {
     );
 
     monolith.interface = monolith.createInterface();
+    internal_event_system.monolith_interface = &monolith.interface;
 
     monolith.load() catch |err| {
         error_occurred = err;
@@ -101,8 +102,10 @@ pub fn main() !void {
 
     logger.info("Running the modular monolith...", .{});
     while (try monolith.run()) {
-        try monolith.internal_event_system.pumpEvents();
-        _ = arena_allocator.reset(.retain_capacity);
+        if (arena_allocator.reset(.retain_capacity) == false) {
+            logger.warn("Some reallocations in the event allocator failed, event queues might experience a slow down.", .{});
+        }
+
         std.time.sleep(10 * std.time.ns_per_ms);
 
         if (should_exit.load(.acquire)) {

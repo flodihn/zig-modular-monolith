@@ -7,7 +7,7 @@ pub const Event = extern struct {
     // Event type is supposed to store a unique name defining the event.
     event_type: [*:0]const u8,
     // The data is a binary containing anything data the event needs, usually a struct.
-    data: [*]const u8,
+    data: ?*anyopaque,
     // Length of the binary
     data_len: usize,
 };

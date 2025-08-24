@@ -5,8 +5,10 @@
 // Part of the Modular Monolith Framework: https://github.com/flodihn/zig-modular-monolith
 const std = @import("std");
 const ModuleLoader = @import("../module_loader.zig").ModuleLoader;
-const logger = @import("../common.zig").logger;
+const MonolithInterface = @import("../common.zig").MonolithInterface;
 const Event = @import("event.zig").Event;
+
+const logger = @import("../common.zig").logger;
 
 const Fifo = std.fifo.LinearFifo(Event, .Dynamic);
 const Mutex = std.Thread.Mutex;
@@ -17,6 +19,7 @@ pub const InternalEventSystem = struct {
     event_queue_mutex: Mutex,
     event_queue: Fifo,
     module_loader: *ModuleLoader,
+    monolith_interface: ?*MonolithInterface,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -29,6 +32,7 @@ pub const InternalEventSystem = struct {
             .event_queue_mutex = Mutex{},
             .event_queue = Fifo.init(allocator),
             .module_loader = module_loader,
+            .monolith_interface = undefined,
         };
     }
 
@@ -41,12 +45,9 @@ pub const InternalEventSystem = struct {
         self.event_queue_mutex.lock();
         defer self.event_queue_mutex.unlock();
 
-        // Deep copy before queuing to own the strings because modules might
-        // have stack allocated the strings.
-        //const copied_event = self.deepCopyEvent(event) catch |err| {
-        //    logger.err("Error deep copying event: {}", .{err});
-        //    return;
-        //};
+        if (self.monolith_interface == null) {
+            @panic("Monlith interface not set in the IntenernalEventHandler!");
+        }
 
         self.event_queue.writeItem(event) catch |err| {
             logger.err("Error writing event to queue: {}", .{err});
@@ -76,11 +77,9 @@ pub const InternalEventSystem = struct {
             // Broadcast to modules
             for (self.module_loader.modules.items) |module| {
                 if (module.onEvent) |onEvent| {
-                    onEvent(event);
+                    onEvent(self.monolith_interface.?, event);
                 }
             }
         }
-
-        //_ = self.event_allocator.reset(.retain_capacity);
     }
 };

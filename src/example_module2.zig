@@ -14,6 +14,13 @@ const ModuleState = struct {
     other_value: []const u8 = "",
 };
 
+const MyEvent = struct {
+    data1: [*:0]const u8,
+    data2: i32,
+    data3: f32,
+    data4: u8,
+};
+
 // Use var to allow modification, stored in global data section
 var module_state = ModuleState{
     .counter = 0,
@@ -39,6 +46,24 @@ pub export fn update(delta_time: f32) callconv(.C) void {
     std.debug.print("Module2 '{s}' updated, delta_time: {d:.3}, counter: {}\n", .{ module_state.name, delta_time, module_state.counter });
 }
 
-pub export fn onEvent(event: Event) callconv(.C) void {
+pub export fn onEvent(monolith: *MonolithInterface, event: Event) callconv(.C) void {
     std.debug.print("Module2 '{s}' received event '{any}'\n", .{ module_state.name, event.event_type });
+
+    const event_slice = std.mem.span(event.event_type);
+
+    if (std.mem.eql(u8, event_slice, "ExampleModule.Started")) {
+        const data = monolith.getEventData(MyEvent, event) catch |err| {
+            std.debug.print("Error decoding event data {}\n", .{err});
+            return;
+        };
+        std.debug.print("ExampleModule2 Decoded data: {s}, {} {} {}\n", .{ data.data1, data.data2, data.data3, data.data4 });
+    }
+
+    if (std.mem.eql(u8, event_slice, "Event2")) {
+        const data = monolith.getEventData(MyEvent, event) catch |err| {
+            std.debug.print("Error decoding event data {}\n", .{err});
+            return;
+        };
+        std.debug.print("ExampleModule2 Decoded data: {s}, {} {} {}\n", .{ data.data1, data.data2, data.data3, data.data4 });
+    }
 }
